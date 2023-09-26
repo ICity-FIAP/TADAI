@@ -1,18 +1,22 @@
-# Use uma imagem base oficial do Python
-FROM python:3.8-slim
+# Use uma imagem base com Python
+FROM python:3.9.13
 
-# Defina o diretório de trabalho no contêiner
+# Copie os arquivos necessários para o contêiner
+COPY app.py /app/
+COPY app_updated.py /app/
+COPY Final_MVP.html /app/
+COPY Final_MVP_updated.html /app/
+COPY Modelo.ipynb /app/
+COPY requirements.txt /app/
+
+# Defina o diretório de trabalho
 WORKDIR /app
 
-# Copie os arquivos do projeto para o contêiner
-COPY . .
+# Instale as dependências
+RUN pip install -r requirements.txt
 
-# Instale as bibliotecas necessárias
-COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Expõe a porta que o Flask vai rodar
+# Exponha a porta que o app usará
 EXPOSE 5000
 
-# Comando para iniciar o servidor Flask quando o contêiner é iniciado
-CMD ["python", "app.py"]
+# Execute o app
+CMD ["python", "app_AWS.py"]
