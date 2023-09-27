@@ -254,7 +254,7 @@ def HelloWorld():
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
-    return send_from_directory('template', 'Final_MVP.html')
+    return send_from_directory('template', 'Final_MVP_local.html')
 
 
 @app.route('/api/upload', methods=['POST'])

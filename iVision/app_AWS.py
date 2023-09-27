@@ -19,13 +19,20 @@ from flask_cors import CORS
 
 
 
+# Uso (exemplo):
+# upload_video_to_s3('path/to/your/video.mp4', 'your-s3-bucket')
+# video_url = get_s3_video_url('your-s3-bucket', 'path/to/your/video.mp4')
+
+aws_access_key = os.environ.get('AWS_ACCESS_KEY')
+aws_secret_key = os.environ.get('AWS_SECRET_KEY')
+stream_name = "seu_stream_kinesis_real"
 
 
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮AWS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 kinesis_client = boto3.client('kinesis', region_name='YOUR_REGION', 
                               aws_access_key_id='YOUR_ACCESS_KEY',
                               aws_secret_access_key='YOUR_SECRET_KEY')
-stream_name = 'YOUR_STREAM_NAME'
+
+kinesis = boto3.client("kinesis", region_name="sua_regiao_aws")
 
 
 
@@ -35,10 +42,9 @@ response = kinesis_client.get_data_endpoint(
 stream_url = response['DataEndpoint']
 
 
-sns_client = boto3.client('sns', region_name='YOUR_REGION',
-    
-                          aws_access_key_id='YOUR_ACCESS_KEY',
-                          aws_secret_access_key='YOUR_SECRET_KEY')
+sns = boto3.client("sns", region_name="sua_regiao_aws")  
+aws_access_key_id='YOUR_ACCESS_KEY'
+aws_secret_access_key='YOUR_SECRET_KEY'
 topic_arn = 'YOUR_SNS_TOPIC_ARN'
 
 
@@ -47,8 +53,34 @@ AWS_ACCESS_KEY = 'YOUR_AWS_ACCESS_KEY'
 AWS_SECRET_KEY = 'YOUR_AWS_SECRET_KEY'
 S3_BUCKET_NAME = 'YOUR_S3_BUCKET_NAME'
 
-# Crie um cliente S3
+# # Crie um cliente S3
 s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY)
+
+def upload_video_to_s3(file_name, bucket, object_name=None):
+    s3 = boto3.client('s3')
+    s3.upload_file(file_name, bucket, object_name or file_name)
+
+def get_s3_video_url(bucket, file_name):
+    return f"https://{bucket}.s3.amazonaws.com/{file_name}"
+
+
+# Criação de um Cliente Kinesis
+kinesis = boto3.client('kinesisvideo')
+
+# Obtenção da URL do Stream de Vídeo
+response = kinesis.get_data_endpoint(
+    StreamARN='SeuStreamARN',
+    APIName='GET_HLS_STREAMING_SESSION_URL'
+)
+data_endpoint = response['DataEndpoint']
+
+# Obtenção do URL da Sessão de Streaming HLS
+kvam = boto3.client('kinesis-video-archived-media', endpoint_url=data_endpoint)
+url_response = kvam.get_hls_streaming_session_url(
+    StreamName='SeuStreamName',
+    PlaybackMode='LIVE'
+)
+url = url_response['HLSStreamingSessionURL']
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
@@ -77,23 +109,30 @@ temp_folder = 'iVision\\temp'
 
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮Camera❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 class Camera:
-    accident_detected =False
-    def __init__(self):
-        self.camera = cv2.VideoCapture(1)
+    accident_detected = False
+
+    def __init__(self, video_url):
+        self.video_url = video_url
         self.frame = None
         self.accident_flag = False
         self.max_prob = 0
         self.lock = threading.Lock()
 
-
-
-
+    def capture_frame_from_kinesis(self):
+        cap = cv2.VideoCapture(self.video_url)
+        ret, frame = cap.read()
+        if not ret:
+            print("Erro ao capturar frame do vídeo")
+            return None
+        cap.release()
+        return frame
 
     def run(self):
         while True:
-            success, frame = self.camera.read()
-            if not success:
+            frame = self.capture_frame_from_kinesis()
+            if frame is None:
                 break
             else:
                 prediction = predict_accident(frame)
@@ -108,9 +147,7 @@ class Camera:
                 clip_path = os.path.join(temp_folder, clip_name)
                 save_buffer_as_video(video_buffer, clip_path)
 
-
-
-camera = Camera()
+camera = Camera(video_url)  # Passe a URL do vídeo do Kinesis como argumento
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -122,7 +159,7 @@ camera = Camera()
 
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SMS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+TopicArn="seu_topic_sns_real"
 def send_accident_notification():
     message = "Um acidente foi detectado!"
     response = sns_client.publish(
@@ -303,7 +340,7 @@ def accident_status():
 
 @app.route('/accident_clip', methods=['GET'])
 def accident_clip():
-    # Nome do arquivo no S3
+    video_url = f"https://seu-bucket-real.s3.amazonaws.com/{filename}"
     filename = "accident_clip.mp4"
 
     # Construa a URL do clipe de vídeo no S3
