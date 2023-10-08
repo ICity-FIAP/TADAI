@@ -19,20 +19,25 @@ from flask_cors import CORS
 
 
 
+
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮AWS CREDENTIALS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 # Uso (exemplo):
 # upload_video_to_s3('path/to/your/video.mp4', 'your-s3-bucket')
 # video_url = get_s3_video_url('your-s3-bucket', 'path/to/your/video.mp4')
 
-aws_access_key = os.environ.get('AWS_ACCESS_KEY')
-aws_secret_key = os.environ.get('AWS_SECRET_KEY')
+AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
+AWS_SECRET_KEY = os.environ.get('AWS_SECRET_KEY')
+topic_arn_SNS = os.environ.get('ARN_SNS')
 stream_name = "seu_stream_kinesis_real"
 
 
-kinesis_client = boto3.client('kinesis', region_name='YOUR_REGION', 
-                              aws_access_key_id='YOUR_ACCESS_KEY',
-                              aws_secret_access_key='YOUR_SECRET_KEY')
+kinesis_client = boto3.client('kinesis', region_name='AWS_REGION', 
+                              aws_access_key_id='AWS_ACCESS_KEY_ID',
+                              aws_secret_access_key='AWS_SECRET_ACCESS_KEY')
 
-kinesis = boto3.client("kinesis", region_name="sua_regiao_aws")
+kinesis = boto3.client("kinesis", region_name="AWS_REGION")
 
 
 
@@ -42,16 +47,27 @@ response = kinesis_client.get_data_endpoint(
 stream_url = response['DataEndpoint']
 
 
-sns = boto3.client("sns", region_name="sua_regiao_aws")  
-aws_access_key_id='YOUR_ACCESS_KEY'
-aws_secret_access_key='YOUR_SECRET_KEY'
-topic_arn = 'YOUR_SNS_TOPIC_ARN'
 
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SNS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Cliente SNS
+sns_client = boto3.client("sns", 
+    region_name="us-east-1",
+    aws_access_key_id=AWS_ACCESS_KEY, 
+    aws_secret_access_key=AWS_SECRET_KEY
+)  
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+
+
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮S3❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Configurações do Amazon S3
-AWS_ACCESS_KEY = 'YOUR_AWS_ACCESS_KEY'
-AWS_SECRET_KEY = 'YOUR_AWS_SECRET_KEY'
-S3_BUCKET_NAME = 'YOUR_S3_BUCKET_NAME'
+AWS_ACCESS_KEY = 'AWS_ACCESS_KEY_ID'
+AWS_SECRET_KEY = 'AWS_SECRET_ACCESS_KEY'
+S3_BUCKET_NAME = 'S3_BUCKET_NAME'
 
 # # Crie um cliente S3
 s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY)
@@ -62,7 +78,13 @@ def upload_video_to_s3(file_name, bucket, object_name=None):
 
 def get_s3_video_url(bucket, file_name):
     return f"https://{bucket}.s3.amazonaws.com/{file_name}"
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+
+
+
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮Kinesis❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Criação de um Cliente Kinesis
 kinesis = boto3.client('kinesisvideo')
@@ -159,13 +181,35 @@ camera = Camera(video_url)  # Passe a URL do vídeo do Kinesis como argumento
 
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SMS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TopicArn="seu_topic_sns_real"
 def send_accident_notification():
-    message = "Um acidente foi detectado!"
-    response = sns_client.publish(
-        TopicArn=topic_arn,
-        Message=message,
+    # Cliente S3
+    s3_client = boto3.client('s3',
+        region_name='us-east-1',
+        aws_access_key_id=AWS_ACCESS_KEY,
+        aws_secret_access_key=AWS_SECRET_KEY
     )
+    
+    # Estrutura da mensagem
+    publish_object = {'ACIDENTE DETECTADO VERIFIQUE AS CÂMERAS IMEDIATAMENTES'}
+    message = str(publish_object)  # Converta o objeto para uma string para ser enviada como mensagem
+    
+    # Publicando a mensagem no SNS
+    response = sns_client.publish(
+        TopicArn=topic_arn_SNS,
+        Subject='PURCHASE',
+        Message=message,
+        MessageAttributes={
+            'TransactionType': {
+                'DataType': 'String',
+                'StringValue':'PURCHASE'
+            }
+        }
+    )
+    
+    print(response['ResponseMetadata']['HTTPStatusCode'])
+
+
+
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
