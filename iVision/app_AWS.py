@@ -29,6 +29,7 @@ from flask_cors import CORS
 
 AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
 AWS_SECRET_KEY = os.environ.get('AWS_SECRET_KEY')
+AWS_REGION =os.environ.get('AWS_REGION')
 topic_arn_SNS = os.environ.get('ARN_SNS')
 stream_name = "seu_stream_kinesis_real"
 
@@ -36,8 +37,6 @@ stream_name = "seu_stream_kinesis_real"
 kinesis_client = boto3.client('kinesis', region_name='AWS_REGION', 
                               aws_access_key_id='AWS_ACCESS_KEY_ID',
                               aws_secret_access_key='AWS_SECRET_ACCESS_KEY')
-
-kinesis = boto3.client("kinesis", region_name="AWS_REGION")
 
 
 
@@ -55,7 +54,6 @@ sns_client = boto3.client("sns",
     aws_access_key_id=AWS_ACCESS_KEY, 
     aws_secret_access_key=AWS_SECRET_KEY
 )  
-
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
@@ -65,8 +63,8 @@ sns_client = boto3.client("sns",
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮S3❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Configurações do Amazon S3
-AWS_ACCESS_KEY = 'AWS_ACCESS_KEY_ID'
-AWS_SECRET_KEY = 'AWS_SECRET_ACCESS_KEY'
+# AWS_ACCESS_KEY = 'AWS_ACCESS_KEY_ID'
+# AWS_SECRET_KEY = 'AWS_SECRET_ACCESS_KEY'   VER SE SERÁ NECESSARIO COLOCAR OUTRAS CREDENCIAIS
 S3_BUCKET_NAME = 'S3_BUCKET_NAME'
 
 # # Crie um cliente S3
