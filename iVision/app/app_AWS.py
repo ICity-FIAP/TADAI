@@ -26,10 +26,6 @@ from botocore.exceptions import ClientError
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮AWS CREDENTIALS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-import boto3
-import json
-from botocore.exceptions import ClientError
-
 def get_secret():
     secret_name = "app_AWS_py"
     region_name = "us-east-1"
@@ -105,7 +101,7 @@ def create_temporary_token(secret_name, region_name):
 
 # Retrieve AWS Secrets and Set as Environment Variables
 try:
-    secrets = get_secret('YOUR_SECRET_NAME', 'YOUR_AWS_REGION')
+    secrets = get_secret('YOUR_SECRET_NAME', 'us-east-1')
     os.environ.update(secrets)
 except Exception as e:
     print(f"Unable to retrieve secrets: {str(e)}")
@@ -144,14 +140,14 @@ def get_s3_video_url(bucket, file_name):
 kinesis_client = boto3.client('kinesis', region_name='us-east-1')
 
 response = kinesis_client.get_data_endpoint(
-    StreamName='your_stream_name',
+    StreamName='Camera_01',
     APIName='GET_MEDIA'
 )
 stream_url = response['DataEndpoint']
 
 kvam = boto3.client('kinesis-video-archived-media', endpoint_url=stream_url)
 url_response = kvam.get_hls_streaming_session_url(
-    StreamName='your_stream_name',
+    StreamName='Camera_01',
     PlaybackMode='LIVE'
 )
 url = url_response['HLSStreamingSessionURL']
@@ -193,7 +189,7 @@ def send_accident_notification(topic_arn, message, subject):
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮S3❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME', 'S3_BUCKET_NAME')
+S3_BUCKET_NAME = 'tadai'
 s3_client = boto3.client('s3')
 
 def upload_video_to_s3(file_name, bucket, object_name=None):
