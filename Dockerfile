@@ -1,22 +1,20 @@
-# Use uma imagem base com Python
-FROM python:3.9.13
+# Utilize uma imagem com Python pré-instalado
+FROM python:3.9-slim
 
-# Copie os arquivos necessários para o contêiner
-COPY app.py /app/
-COPY app_updated.py /app/
-COPY Final_MVP.html /app/
-COPY Final_MVP_updated.html /app/
-COPY Modelo.ipynb /app/
-COPY requirements.txt /app/
-
-# Defina o diretório de trabalho
+# Crie um diretório de trabalho
 WORKDIR /app
 
+# Copie o código do aplicativo e dependências para o contêiner
+COPY app_AWS.py /app
+COPY requirements.txt /app
+
+
 # Instale as dependências
-RUN pip install -r requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
 
-# Exponha a porta que o app usará
-EXPOSE 5000
+# Baixar o modelo de S3 durante a construção (se aplicável e seguro para o seu uso caso)
+# RUN aws s3 cp s3://your-bucket/Model /app/Model
 
-# Execute o app
-CMD ["python", "app_AWS.py"]
+# Quando o contêiner iniciar, execute o aplicativo Flask
+CMD ["python", "./app_AWS.py"]

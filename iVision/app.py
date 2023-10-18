@@ -48,7 +48,7 @@ video_buffer = []
 
 FPS = 30  # Assumindo que a câmera tenha 30 FPS, ajustar se necessário
 BUFFER_SIZE = 15 * FPS  # 10 segundos de vídeo
-CNN_Model = load_model('iVision\Model\Model')
+CNN_Model = load_model(r'iVision\app\Model')
 
 base_model = VGG16(include_top=False, weights='imagenet', input_shape=(224, 224, 3))
 if not os.path.exists("iVision\\temp"):
@@ -273,7 +273,7 @@ def upload():
 def video_feed():
     camera_thread = threading.Thread(target=camera.run)
     camera_thread.start()
-    return Response(gen_frames(camera), mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(gen_frames(camera), mimetype='multipart/text/event-stream; boundary=frame')
 
 @app.route('/accident_status')
 def accident_status():
@@ -281,18 +281,13 @@ def accident_status():
         "accident_detected": bool(Camera.accident_detected)  # Convertendo para booleano padrão
     })
 
+
 @app.route('/accident_clip')
 def accident_clip():
-    directory = r"C:\\Users\\pytho\\Documents\\GitHub\\Icity\\iVision\\temp"
-    filename = "accident_clip.mp4"  # Certifique-se de que o arquivo é um .mp4
+    # return "esta funcionando"
+    directory = r"C:\Users\pytho\Documents\GitHub\TADAI\iVision\temp"
+    filename = "accident_clip.mp4" 
     return send_from_directory(directory, filename)
-
-
-
-
-
-
-
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 

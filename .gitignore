@@ -54,3 +54,8 @@ temp/
 # Pasta do modelo
 iVision/Model/Model/
 iVision/Model/model_gpu/MODELGPU
+iVision/app/Model/variables/variables.data-00000-of-00001
+iVision/app/Model/saved_model.pb
+iVision/app/Model/keras_metadata.pb
+iVision/app/Model/fingerprint.pb
+iVision/app/Model/variables/variables.index

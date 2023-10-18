@@ -245,10 +245,12 @@
   <!-- Elemento de vídeo para reproduzir o clipe de acidente -->
   <div class="container">
     <!-- Seu elemento de vídeo -->
-    <video id="accidentVideo" controls width="640" height="480">
-      <source src="/accident_clip" type="video/avi">
-      Seu navegador não suporta o tag de vídeo.
+    <video width="750" height="500" controls id="accidentVideo">
+      <source src="/accident_clip" type="video/mp4">
+      O browser não suporta o video
     </video>
+
+
 
     <!-- Botão para carregar o clipe de acidente -->
     <button id="accidentClipButton" onclick="loadAccidentClip()">Carregar clipe de acidente</button>
@@ -274,13 +276,13 @@
       const response = await fetch("/accident_status");
       const data = await response.json();
       if (data.accident_detected) {
-        // ...
-
         // Atualize o vídeo do acidente usando a URL da rota /accident_clip
-        document.getElementById("accidentVideo").src = "/accident_clip";
+        document.querySelector("#accidentVideo > source").src = "/accident_clip?" + new Date().getTime();
         document.getElementById("accidentVideo").load();
       }
     }, 3000);
+
+
 
 
 

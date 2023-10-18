@@ -7,6 +7,8 @@ import time
 import threading
 import atexit
 import boto3
+import json
+import tempfile
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 from flask import Flask, request, jsonify, send_from_directory, Response
 from tensorflow.keras.models import load_model
@@ -15,6 +17,7 @@ from tensorflow.keras.applications.vgg16 import preprocess_input, VGG16
 from moviepy.editor import ImageSequenceClip
 from dotenv import load_dotenv
 from flask_cors import CORS
+from botocore.exceptions import ClientError
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
@@ -23,52 +26,104 @@ from flask_cors import CORS
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮AWS CREDENTIALS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# Uso (exemplo):
-# upload_video_to_s3('path/to/your/video.mp4', 'your-s3-bucket')
-# video_url = get_s3_video_url('your-s3-bucket', 'path/to/your/video.mp4')
+import boto3
+import json
+from botocore.exceptions import ClientError
 
-AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
-AWS_SECRET_KEY = os.environ.get('AWS_SECRET_KEY')
-AWS_REGION =os.environ.get('AWS_REGION')
-topic_arn_SNS = os.environ.get('ARN_SNS')
-stream_name = "seu_stream_kinesis_real"
+def get_secret():
+    secret_name = "app_AWS_py"
+    region_name = "us-east-1"
+
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name,
+    )
+
+    try:
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            print("The requested secret " + secret_name + " was not found")
+        elif e.response['Error']['Code'] == 'InvalidRequestException':
+            print("The request was invalid due to:", e)
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            print("The request had invalid params:", e)
+        elif e.response['Error']['Code'] == 'DecryptionFailure':
+            print("The requested secret can't be decrypted using the provided KMS key:", e)
+        elif e.response['Error']['Code'] == 'InternalServiceError':
+            print("An error occurred on service side:", e)
+            
+    else:
+        if 'SecretString' in get_secret_value_response:
+            text_secret_data = get_secret_value_response['SecretString']
+            try:
+                secrets = json.loads(text_secret_data)
+            except json.JSONDecodeError as json_error:
+                print("Error: Failed to decode the secret string as JSON:", str(json_error))
+                return None
+            else:
+                return secrets
 
 
-kinesis_client = boto3.client('kinesis', region_name='AWS_REGION', 
-                              aws_access_key_id='AWS_ACCESS_KEY_ID',
-                              aws_secret_access_key='AWS_SECRET_ACCESS_KEY')
+secrets = get_secret()
+
+# Example of how to access the values
+# (add verification logic as needed)
+if secrets:
+    AWS_ACCESS_KEY_ID = secrets.get('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = secrets.get('AWS_SECRET_ACCESS_KEY')
+    ARN_SNS = secrets.get('ARN_SNS')
+else:
+    print("No secrets were retrieved.")
+    AWS_ACCESS_KEY_ID = AWS_SECRET_ACCESS_KEY = ARN_SNS = None
 
 
+def create_temporary_token(secret_name, region_name):
+    credentials = get_secret(secret_name, region_name)
+    
+    sts_client = boto3.client(
+        'sts',
+        aws_access_key_id=credentials['aws_access_key_id'],
+        aws_secret_access_key=credentials['aws_secret_access_key'],
+        region_name=region_name
+    )
+    
+    assumed_role_object = sts_client.assume_role(
+        RoleArn="arn:aws:iam::account-of-the-role-to-assume:role/name-of-the-role",
+        RoleSessionName="AssumeRoleSession1"
+    )
+    
+    credentials = assumed_role_object['Credentials']
+    
+    return {
+        'aws_access_key_id': credentials['AccessKeyId'],
+        'aws_secret_access_key': credentials['SecretAccessKey'],
+        'aws_session_token': credentials['SessionToken']
+    }
 
-response = kinesis_client.get_data_endpoint(
-    StreamName=stream_name,
-    APIName='GET_MEDIA')
-stream_url = response['DataEndpoint']
-
-
+# Retrieve AWS Secrets and Set as Environment Variables
+try:
+    secrets = get_secret('YOUR_SECRET_NAME', 'YOUR_AWS_REGION')
+    os.environ.update(secrets)
+except Exception as e:
+    print(f"Unable to retrieve secrets: {str(e)}")
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SNS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Cliente SNS
-sns_client = boto3.client("sns", 
-    region_name="us-east-1",
-    aws_access_key_id=AWS_ACCESS_KEY, 
-    aws_secret_access_key=AWS_SECRET_KEY
-)  
+
+sns_client = boto3.client('sns', region_name='us-east-1')
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 
 
 
+
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮S3❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Configurações do Amazon S3
-# AWS_ACCESS_KEY = 'AWS_ACCESS_KEY_ID'
-# AWS_SECRET_KEY = 'AWS_SECRET_ACCESS_KEY'   VER SE SERÁ NECESSARIO COLOCAR OUTRAS CREDENCIAIS
-S3_BUCKET_NAME = 'S3_BUCKET_NAME'
-
-# # Crie um cliente S3
-s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY)
+S3_BUCKET_NAME = 'tadai-icity'
+s3_client = boto3.client('s3')
+model_key = 's3://tadai-icity/Modelo/Model/'
 
 def upload_video_to_s3(file_name, bucket, object_name=None):
     s3 = boto3.client('s3')
@@ -76,32 +131,120 @@ def upload_video_to_s3(file_name, bucket, object_name=None):
 
 def get_s3_video_url(bucket, file_name):
     return f"https://{bucket}.s3.amazonaws.com/{file_name}"
+
+
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮Kinesis❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+kinesis_client = boto3.client('kinesis', region_name='us-east-1')
+
+response = kinesis_client.get_data_endpoint(
+    StreamName='your_stream_name',
+    APIName='GET_MEDIA'
+)
+stream_url = response['DataEndpoint']
+
+kvam = boto3.client('kinesis-video-archived-media', endpoint_url=stream_url)
+url_response = kvam.get_hls_streaming_session_url(
+    StreamName='your_stream_name',
+    PlaybackMode='LIVE'
+)
+url = url_response['HLSStreamingSessionURL']
+
+# Load ML Model from S3 Bucket
+def load_model_from_s3(bucket_name, model_key):
+    s3_client = boto3.client('s3')
+    with tempfile.NamedTemporaryFile(suffix='.h5') as tmp:
+        s3_client.download_file(bucket_name, model_key, tmp.name)
+        model = load_model(tmp.name)
+    return model
+
+# Example of model loading, replace with your real values
+# CNN_Model = load_model_from_s3('your_bucket_name', 'your_model_key')
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SNS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def send_accident_notification(topic_arn, message, subject):
+    # Criar um cliente SNS
+    sns_client = boto3.client(
+        'sns',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name='us-east-1'
+    )
+    
+    # Enviar a mensagem
+    response = sns_client.publish(
+        TopicArn=topic_arn,
+        Message=message,
+        Subject=subject
+    )
+    
+    return response
+
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮S3❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME', 'S3_BUCKET_NAME')
+s3_client = boto3.client('s3')
+
+def upload_video_to_s3(file_name, bucket, object_name=None):
+    s3 = boto3.client('s3')
+    s3.upload_file(file_name, bucket, object_name or file_name)
+
+def get_s3_video_url(bucket, file_name):
+    return f"https://{bucket}.s3.amazonaws.com/{file_name}"
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮Kinesis❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Criação de um Cliente Kinesis
-kinesis = boto3.client('kinesisvideo')
+kinesis_client = boto3.client('kinesis', region_name='us-east-1')  # Corrigido para us-east-1
+
+# Substitua 'SeuStreamName' pelo nome do seu stream
+stream_name = 'SeuStreamName'
 
 # Obtenção da URL do Stream de Vídeo
-response = kinesis.get_data_endpoint(
-    StreamARN='SeuStreamARN',
-    APIName='GET_HLS_STREAMING_SESSION_URL'
-)
-data_endpoint = response['DataEndpoint']
+try:
+    response = kinesis_client.get_data_endpoint(
+        StreamName=stream_name,
+        APIName='GET_MEDIA'
+    )
+    stream_url = response['DataEndpoint']
+except boto3.exceptions.botocore.exceptions.EndpointConnectionError as e:
+    print(f"Erro ao conectar com o endpoint: {str(e)}")
+    # Adicione mais tratamentos conforme necessário
 
 # Obtenção do URL da Sessão de Streaming HLS
-kvam = boto3.client('kinesis-video-archived-media', endpoint_url=data_endpoint)
-url_response = kvam.get_hls_streaming_session_url(
-    StreamName='SeuStreamName',
-    PlaybackMode='LIVE'
-)
-url = url_response['HLSStreamingSessionURL']
+try:
+    kvam = boto3.client('kinesis-video-archived-media', endpoint_url=stream_url)
+    url_response = kvam.get_hls_streaming_session_url(
+        StreamName=stream_name,
+        PlaybackMode='LIVE'
+    )
+    url = url_response['HLSStreamingSessionURL']
+except Exception as e:
+    print(f"Erro ao obter a URL de streaming: {str(e)}")
+    # Adicione mais tratamentos conforme necessário
+
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+
+
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SNS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sns_client = boto3.client('sns', region_name='us-east-1')
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 
 
@@ -115,18 +258,13 @@ video_buffer = []
 
 FPS = 30  # Assumindo que a câmera tenha 30 FPS, ajustar se necessário
 BUFFER_SIZE = 15 * FPS  # 10 segundos de vídeo
-CNN_Model = load_model('iVision\Model\Model')
+
+CNN_Model = load_model_from_s3(S3_BUCKET_NAME, model_key)
 
 base_model = VGG16(include_top=False, weights='imagenet', input_shape=(224, 224, 3))
-if not os.path.exists("iVision\\temp"):
-    os.makedirs("iVision\\temp")
-
-temp_folder = 'iVision\\temp'
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-
-
+temp_folder ='s3://tadai-icity/Video/'
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮Camera❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -168,45 +306,6 @@ class Camera:
                 save_buffer_as_video(video_buffer, clip_path)
 
 camera = Camera(video_url)  # Passe a URL do vídeo do Kinesis como argumento
-
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
-
-
-
-
-
-
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮SMS❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def send_accident_notification():
-    # Cliente S3
-    s3_client = boto3.client('s3',
-        region_name='us-east-1',
-        aws_access_key_id=AWS_ACCESS_KEY,
-        aws_secret_access_key=AWS_SECRET_KEY
-    )
-    
-    # Estrutura da mensagem
-    publish_object = {'ACIDENTE DETECTADO VERIFIQUE AS CÂMERAS IMEDIATAMENTES'}
-    message = str(publish_object)  # Converta o objeto para uma string para ser enviada como mensagem
-    
-    # Publicando a mensagem no SNS
-    response = sns_client.publish(
-        TopicArn=topic_arn_SNS,
-        Subject='PURCHASE',
-        Message=message,
-        MessageAttributes={
-            'TransactionType': {
-                'DataType': 'String',
-                'StringValue':'PURCHASE'
-            }
-        }
-    )
-    
-    print(response['ResponseMetadata']['HTTPStatusCode'])
-
-
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -340,16 +439,17 @@ def detect_accident(video_path, CNN_Model):
 
 
 
-
+template ='s3://tadai-icity/Template/'
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮Rotas❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @app.route('/hello', methods=['GET'])
 def HelloWorld():
     return 'Hello World'
 
+
 @app.route('/', methods=['GET', 'POST'])
 def home():
-    return send_from_directory('template', 'Final_MVP.html')
+    return send_from_directory(template, 'Final_MVP.html')
 
 
 @app.route('/api/upload', methods=['POST'])
@@ -382,7 +482,6 @@ def accident_status():
 
 @app.route('/accident_clip', methods=['GET'])
 def accident_clip():
-    video_url = f"https://seu-bucket-real.s3.amazonaws.com/{filename}"
     filename = "accident_clip.mp4"
 
     # Construa a URL do clipe de vídeo no S3
@@ -392,6 +491,17 @@ def accident_clip():
     return jsonify({'video_url': video_url})
 
 
+
+# @app.route('/some_route', methods=['GET'])
+# def some_route():
+#     """
+#     Uma rota de exemplo que faz algo com um segredo recuperado do AWS Secrets Manager.
+    
+#     :return: Uma resposta HTTP.
+#     """
+#     secret = get_secret()
+#     if secret is None:
+#         return "Error retrieving secret", 500
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━❮◆❯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
@@ -400,4 +510,4 @@ def accident_clip():
 #━━━━━━━━━━━━━━━━━━━━━❮Iniciar❯━━━━━━━━━━━━━━━━━━━━
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0', debug=True) #mudar debug para flase
